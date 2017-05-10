@@ -39,7 +39,25 @@ func LogHandlerWrapper(fn server.HandlerFunc) server.HandlerFunc {
 			"ctx":    md,
 			"method": req.Method(),
 		}).Infof("Serving request")
+
 		err := fn(ctx, req, rsp)
+
+		return err
+	}
+}
+
+// Implements the server.HandlerWrapper
+func LogSubscriberWrapper(fn server.SubscriberFunc) server.SubscriberFunc {
+	return func(ctx context.Context, msg server.Publication) error {
+		md, _ := metadata.FromContext(ctx)
+		log.WithFields(log.Fields{
+			"ctx":          md,
+			"topic":        msg.Topic(),
+			"content-type": msg.ContentType(),
+			"event":        msg.Message(),
+		}).Infof("Received message")
+
+		err := fn(ctx, msg)
 
 		return err
 	}
