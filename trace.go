@@ -28,7 +28,6 @@ func (t *traceWrapper) Call(ctx context.Context, req client.Request, rsp interfa
 	return t.Client.Call(ctx, req, rsp)
 }
 
-// Implements client.Wrapper as traceWrapper
-func TraceWrap(c client.Client) client.Client {
+func TraceClientWrapper(c client.Client) client.Client {
 	return &traceWrapper{c}
 }
