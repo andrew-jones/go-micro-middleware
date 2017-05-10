@@ -26,12 +26,10 @@ func (l *logWrapper) Call(ctx context.Context, req client.Request, rsp interface
 	return l.Client.Call(ctx, req, rsp)
 }
 
-// Implements client.Wrapper as logWrapper
-func LogWrap(c client.Client) client.Client {
+func LogClientWrapper(c client.Client) client.Client {
 	return &logWrapper{c}
 }
 
-// Implements the server.HandlerWrapper
 func LogHandlerWrapper(fn server.HandlerFunc) server.HandlerFunc {
 	return func(ctx context.Context, req server.Request, rsp interface{}) error {
 		md, _ := metadata.FromContext(ctx)
@@ -46,7 +44,6 @@ func LogHandlerWrapper(fn server.HandlerFunc) server.HandlerFunc {
 	}
 }
 
-// Implements the server.HandlerWrapper
 func LogSubscriberWrapper(fn server.SubscriberFunc) server.SubscriberFunc {
 	return func(ctx context.Context, msg server.Publication) error {
 		md, _ := metadata.FromContext(ctx)
