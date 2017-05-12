@@ -26,6 +26,8 @@ type endpoint struct {
 	success metrics.Histogram
 	// bad request, code 400-499
 	bad metrics.Histogram
+	// dropped requests, code 408
+	dropped metrics.Histogram
 	// internal server errors, code 500+
 	errors metrics.Histogram
 }
@@ -34,6 +36,7 @@ func newEndpoint(m metrics.Metrics, s string) *endpoint {
 	return &endpoint{
 		success: m.Histogram(s + ".success"),
 		bad:     m.Histogram(s + ".bad"),
+		dropped: m.Histogram(s + ".dropped"),
 		errors:  m.Histogram(s + ".errors"),
 	}
 }
@@ -79,6 +82,8 @@ func (s *stats) Record(req server.Request, d time.Duration, err error) {
 	}
 	// filter error code into bad requests and errors
 	switch {
+	case perr.Code == 408:
+		endpoint.dropped.Record(d_unit)
 	case 400 <= perr.Code && perr.Code <= 499:
 		endpoint.bad.Record(d_unit)
 	default:
