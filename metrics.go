@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/net/context"
@@ -63,12 +65,29 @@ func (s *stats) durationToUnit(d time.Duration) int64 {
 	return d.Nanoseconds() / int64(s.unit)
 }
 
+func codeFromString(s string) int64 {
+	search := "\"code\":"
+	i := strings.Index(s, search)
+	if i == -1 {
+		// search string not found in input string
+		return 500
+	}
+	// parse the code
+	code := s[i+len(search) : i+len(search)+3]
+	// convert to int64
+	i64, err := strconv.ParseInt(code, 10, 32)
+	if err == nil {
+		return i64
+	}
+	// default status code is 500
+	return 500
+}
+
 func (s *stats) Record(req server.Request, d time.Duration, err error) {
-
+	// Get the endpoint stats
 	endpoint := s.endpoint(req.Method())
-
+	// convert the duration into the time unit
 	d_unit := s.durationToUnit(d)
-
 	// successful request, record and return
 	if err == nil {
 		endpoint.success.Record(d_unit)
@@ -78,7 +97,8 @@ func (s *stats) Record(req server.Request, d time.Duration, err error) {
 	// parse the error
 	perr, ok := err.(*errors.Error)
 	if !ok {
-		perr = &errors.Error{Id: req.Service(), Code: 500, Detail: err.Error()}
+		// Check the error message for a response code, error can be client.serverError
+		perr = &errors.Error{Id: req.Service(), Code: int32(codeFromString(err.Error())), Detail: err.Error()}
 	}
 	// filter error code into bad requests and errors
 	switch {
