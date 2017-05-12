@@ -120,7 +120,7 @@ func MetricSubscriberWrapper(m metrics.Metrics, u time.Duration) server.Subscrib
 			// Begin the timer
 			begin := time.Now()
 			// Find the endpoint for metrics
-			endpoint := stats.endpoint(msg.Topic())
+			endpoint := stats.endpoint("subscriber")
 			// Run additional middleware + subscriber function
 			err := fn(ctx, msg)
 			// Record success or error
