@@ -1,15 +1,18 @@
 package middleware
 
 import (
+	"golang.org/x/net/context"
 	"strconv"
 	"strings"
 	"time"
 
-	"golang.org/x/net/context"
-
 	"github.com/micro/go-micro/errors"
 	"github.com/micro/go-micro/server"
 	"github.com/micro/go-os/metrics"
+)
+
+var (
+	MetricRequest = "service.request"
 )
 
 type stats struct {
@@ -18,47 +21,30 @@ type stats struct {
 	metrics metrics.Metrics
 	// unit of time to be recorded
 	unit time.Duration
-	// track each service function
-	endpoints map[string]*endpoint
+	// track multiple histograms by name
+	histograms map[string]metrics.Histogram
 }
 
-// endpoint metrics
-type endpoint struct {
-	// successful request
-	success metrics.Histogram
-	// bad request, code 400-499
-	bad metrics.Histogram
-	// dropped requests, code 408
-	dropped metrics.Histogram
-	// internal server errors, code 500+
-	errors metrics.Histogram
-}
-
-func newEndpoint(m metrics.Metrics, s string) *endpoint {
-	return &endpoint{
-		success: m.Histogram(s + ".success"),
-		bad:     m.Histogram(s + ".bad"),
-		dropped: m.Histogram(s + ".dropped"),
-		errors:  m.Histogram(s + ".errors"),
-	}
+func newHistogram(m metrics.Metrics, s string) metrics.Histogram {
+	return m.Histogram(s)
 }
 
 func newStats(m metrics.Metrics, u time.Duration) *stats {
 	return &stats{
-		metrics:   m,
-		unit:      u,
-		endpoints: make(map[string]*endpoint),
+		metrics:    m,
+		unit:       u,
+		histograms: make(map[string]metrics.Histogram),
 	}
 }
 
-func (s *stats) endpoint(e string) *endpoint {
-	endpoint, ok := s.endpoints[e]
+func (s *stats) histogram(n string) metrics.Histogram {
+	histogram, ok := s.histograms[n]
 	if !ok {
-		endpoint = newEndpoint(s.metrics, e)
-		s.endpoints[e] = endpoint
+		histogram = newHistogram(s.metrics, n)
+		s.histograms[n] = histogram
 	}
 
-	return endpoint
+	return histogram
 }
 
 func (s *stats) durationToUnit(d time.Duration) int64 {
@@ -84,13 +70,18 @@ func codeFromString(s string) int64 {
 }
 
 func (s *stats) Record(req server.Request, d time.Duration, err error) {
+	// Get the service stats
+	// service := s.endpoint(DefaultSumOfAllRequestsName)
 	// Get the endpoint stats
-	endpoint := s.endpoint(req.Method())
+	// endpoint := s.endpoint(req.Method())
 	// convert the duration into the time unit
-	d_unit := s.durationToUnit(d)
+	dUnit := s.durationToUnit(d)
 	// successful request, record and return
+	tags := map[string]string{"status": "error"}
+
 	if err == nil {
-		endpoint.success.Record(d_unit)
+		tags["status"] = "success"
+		s.histogram(MetricRequest).WithFields(tags).Record(dUnit)
 		return
 	}
 
@@ -103,15 +94,15 @@ func (s *stats) Record(req server.Request, d time.Duration, err error) {
 	// filter error code into bad requests and errors
 	switch {
 	case perr.Code == 408:
-		endpoint.dropped.Record(d_unit)
+		tags["status"] = "dropped"
 	case 400 <= perr.Code && perr.Code <= 499:
-		endpoint.bad.Record(d_unit)
-	default:
-		endpoint.errors.Record(d_unit)
+		tags["status"] = "bad"
 	}
+
+	s.histogram(MetricRequest).WithFields(tags).Record(dUnit)
 }
 
-// Implements the server.HandlerWrapper
+// MetricHandlerWrapper implements the server.HandlerWrapper interface
 func MetricHandlerWrapper(m metrics.Metrics, u time.Duration) server.HandlerWrapper {
 	return func(fn server.HandlerFunc) server.HandlerFunc {
 
@@ -124,31 +115,6 @@ func MetricHandlerWrapper(m metrics.Metrics, u time.Duration) server.HandlerWrap
 			err := fn(ctx, req, rsp)
 			// Request is almost done, record metrics
 			stats.Record(req, time.Since(begin), err)
-
-			return err
-		}
-	}
-}
-
-// Implements the server.SubscriberWrapper
-func MetricSubscriberWrapper(m metrics.Metrics, u time.Duration) server.SubscriberWrapper {
-	return func(fn server.SubscriberFunc) server.SubscriberFunc {
-
-		stats := newStats(m, u)
-
-		return func(ctx context.Context, msg server.Publication) error {
-			// Begin the timer
-			begin := time.Now()
-			// Find the endpoint for metrics
-			endpoint := stats.endpoint("subscriber")
-			// Run additional middleware + subscriber function
-			err := fn(ctx, msg)
-			// Record success or error
-			if err == nil {
-				endpoint.success.Record(stats.durationToUnit(time.Since(begin)))
-			} else {
-				endpoint.errors.Record(stats.durationToUnit(time.Since(begin)))
-			}
 
 			return err
 		}
