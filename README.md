@@ -2,7 +2,7 @@
 
 ## Metrics middleware
 
-```
+```go
 // Setting the statsd endpoint with env vars in the main function
 m := datadog.NewMetrics(
     metrics.Namespace("micro"),
@@ -44,7 +44,7 @@ service := micro.NewService(
 
 ## Logging middleware
 
-```
+```go
 service := micro.NewService(
     micro.Name("greeter"),
     micro.Server(
@@ -60,7 +60,7 @@ service := micro.NewService(
 
 ## Trace middleware
 
-```
+```go
 service := micro.NewService(
     micro.Name("greeter"),
     micro.Client(client.NewClient(
@@ -78,7 +78,7 @@ Get your dd-agent.yaml daemon set configuration from here, https://app.datadoghq
 
 You will need to configure a kube service so your go-micro services can connect to the dd-agent pods.  A tradeoff of using a service is you may not connect to the same node. Host ports maybe a better option.
 
-```
+```yaml
 ---
 apiVersion: v1
 kind: Service
